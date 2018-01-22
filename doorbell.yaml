@@ -1,0 +1,88 @@
+camera:
+  - platform: generic
+    name: Door Bell
+    limit_refetch_to_url_change: False
+    still_image_url: http://[[Raspberry.Pi.Camera.IP]]/images/doorbell.jpeg
+
+script:
+#### Take Picture Script #####################################
+  doorbell_take_picture:
+    alias: 'DoorBell Button'
+    sequence:
+      - service: mqtt.publish
+        data:
+          topic: /doorbell/camera/
+          payload: 'MQTTInput'
+      - service: notify.Telegram 
+        data:
+          title: Home Assistant Notification 
+          message: --Doorbell Pressed--
+#### DoorBell Pressed Script #####################################
+  doorbell_send_pic_telegram:
+    alias: 'DoorBell Send Photo' 
+    sequence: 
+      - service: notify.Telegram 
+        data: 
+          title: Home Assistant Notification 
+          message: --Doorbell Pressed-- 
+          data: 
+            photo: 
+              - url: http://[Raspberry.Pi.Camera.IP]/images/doorbell.jpeg 
+                caption: Doorbell View
+
+sensor:
+  - platform: mqtt
+    name: "dev_test"
+    state_topic: "/file/change/test"
+  - platform: template 
+    sensors: 
+      camera_capture_time: 
+        value_template: >-
+          {%- set date_time = states.sensor.dev_test.last_updated.strftime("%A %H:%M:%S") -%}
+          {{ date_time[:-9] + " " +  "%02d"|format((date_time[-8:-6]|int + 1)) + date_time[-6:] }} 
+        friendly_name: 'Camera captured time'
+
+## In customize.yaml hide dev_test sensor
+
+automation:
+######## 1 ################################################
+  - alias: "Door Bell > Send Pic"
+    initial_state: True
+    hide_entity: False
+    trigger:
+      - platform: mqtt
+        topic: /doorbell/newpicture/
+        payload: '{"code":0}'
+    action:
+      - service: script.doorbell_send_pic_telegram
+######## 2 ################################################
+  - alias: "Door Bell > Ring"
+    initial_state: True
+    hide_entity: False
+    trigger:
+      - platform: mqtt
+        topic: /doorbell/camera/
+        payload: 'MQTTInput'
+      - platform: mqtt
+        topic: /door_bell/door_bell/Switch
+        payload: '0'
+    action:
+      - service: [[SPEAKER]]
+        data:
+
+
+group:
+  doorcam_group:
+   view: false
+   control: hidden
+   entities:
+   - sensor.dev_test
+   - sensor.camera_capture_time
+   - automation.door_bell__send_pic_telegram
+   - automation.door_bell__ring
+   - automation.doorbell_pressed_automation
+   - script.doorbell_take_picture
+   - script.doorbell_send_pic_telegram
+   - script.doorbell_send_photo_telegram
+   - camera.door_bell
+
